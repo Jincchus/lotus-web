@@ -94,6 +94,11 @@ export const brokersApi = {
   list: () => api.get<Broker[]>('/brokers'),
 };
 
+// ── Admin ────────────────────────────────────────────────
+export const adminApi = {
+  errorLogs: (limit = 100) => api.get<ErrorLogItem[]>(`/admin/error-logs?limit=${limit}`),
+};
+
 // ── Exchange Rate ────────────────────────────────────────
 export const exchangeRateApi = {
   current: () => api.get<ExchangeRate>('/exchange-rates/current'),
@@ -106,6 +111,7 @@ export interface User {
   email: string;
   name: string;
   profileImage?: string;
+  role: 'user' | 'admin';
 }
 
 export interface DashboardSummary {
@@ -294,4 +300,13 @@ export interface Broker {
 export interface ExchangeRate {
   usdToKrw: number;
   fetchedAt: string;
+}
+
+export interface ErrorLogItem {
+  id: string;
+  message: string;
+  stack: string | null;
+  userId: string | null;
+  path: string | null;
+  createdAt: string;
 }
