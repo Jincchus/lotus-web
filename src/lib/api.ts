@@ -1,21 +1,51 @@
-import axios from 'axios';
+import axios, { InternalAxiosRequestConfig } from 'axios';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:3001';
 
 const api = axios.create({
   baseURL: `${BACKEND_URL}/api`,
-  withCredentials: true, // HttpOnly 쿠키 자동 전송
+  withCredentials: true,
   timeout: 10_000,
 });
 
+let isRefreshing = false;
+let pendingQueue: Array<() => void> = [];
+
 api.interceptors.response.use(
   (res) => res,
-  (err) => {
-    if (err.response?.status === 401) {
-      if (typeof window !== 'undefined') {
-        window.location.href = '/login';
+  async (err) => {
+    const original = err.config as InternalAxiosRequestConfig & { _retry?: boolean };
+
+    // refresh 엔드포인트 자체가 401이면 바로 로그인 이동
+    if (original.url?.includes('/auth/refresh')) {
+      if (typeof window !== 'undefined') window.location.href = '/login';
+      return Promise.reject(err);
+    }
+
+    if (err.response?.status === 401 && !original._retry) {
+      original._retry = true;
+
+      if (isRefreshing) {
+        return new Promise<void>((resolve) => {
+          pendingQueue.push(resolve);
+        }).then(() => api(original));
+      }
+
+      isRefreshing = true;
+      try {
+        await api.post('/auth/refresh');
+        pendingQueue.forEach((cb) => cb());
+        pendingQueue = [];
+        return api(original);
+      } catch {
+        pendingQueue = [];
+        if (typeof window !== 'undefined') window.location.href = '/login';
+        return Promise.reject(err);
+      } finally {
+        isRefreshing = false;
       }
     }
+
     return Promise.reject(err);
   },
 );
@@ -25,6 +55,7 @@ export default api;
 // ── Auth ────────────────────────────────────────────────
 export const authApi = {
   me: () => api.get<User>('/auth/me'),
+  refresh: () => api.post('/auth/refresh'),
   logout: () => api.post('/auth/logout'),
   googleLoginUrl: () => `${BACKEND_URL}/api/auth/google`,
 };
