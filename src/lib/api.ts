@@ -113,6 +113,11 @@ export const stocksApi = {
     api.get<PriceData>(`/stocks/price`, { params: { symbol, market } }),
 };
 
+// ── Notices (대시보드용) ─────────────────────────────────
+export const noticesApi = {
+  active: () => api.get<Notice[]>('/notices'),
+};
+
 // ── Watchlist ───────────────────────────────────────────
 export const watchlistApi = {
   list: () => api.get<WatchlistItem[]>('/watchlists'),
@@ -127,7 +132,20 @@ export const brokersApi = {
 
 // ── Admin ────────────────────────────────────────────────
 export const adminApi = {
-  errorLogs: (limit = 100) => api.get<ErrorLogItem[]>(`/admin/error-logs?limit=${limit}`),
+  errorLogs:       (limit = 100) => api.get<ErrorLogItem[]>(`/admin/error-logs?limit=${limit}`),
+  users:           ()             => api.get<AdminUser[]>('/admin/users'),
+  updateUserRole:  (id: string, role: 'user' | 'admin') => api.patch(`/admin/users/${id}/role`, { role }),
+  stocks:          ()             => api.get<AdminStock[]>('/admin/stocks'),
+  updateStock:     (id: string, data: Partial<{ name: string; market: string }>) => api.patch(`/admin/stocks/${id}`, data),
+  systemStatus:    ()             => api.get<SystemStatus>('/admin/system-status'),
+  // 공지사항
+  allNotices:      ()             => api.get<Notice[]>('/notices/all'),
+  createNotice:    (data: { title: string; content: string }) => api.post<Notice>('/notices', data),
+  updateNotice:    (id: string, data: Partial<{ title: string; content: string; isActive: boolean }>) => api.patch<Notice>(`/notices/${id}`, data),
+  deleteNotice:    (id: string)   => api.delete(`/notices/${id}`),
+  // 환율
+  upsertRate:      (date: string, usdToKrw: number) => api.put(`/exchange-rates/${date}`, { usdToKrw }),
+  // 활성 공지 (대시보드용)
 };
 
 // ── Exchange Rate ────────────────────────────────────────
@@ -340,4 +358,36 @@ export interface ErrorLogItem {
   userId: string | null;
   path: string | null;
   createdAt: string;
+}
+
+export interface AdminUser {
+  id: string;
+  email: string;
+  name: string;
+  role: 'user' | 'admin';
+  createdAt: string;
+}
+
+export interface AdminStock {
+  id: string;
+  symbol: string;
+  market: string;
+  name: string;
+  currency: string;
+}
+
+export interface SystemStatus {
+  uptime: number;
+  nodeVersion: string;
+  memory: { heapUsed: number; heapTotal: number; rss: number };
+  timestamp: string;
+}
+
+export interface Notice {
+  id: string;
+  title: string;
+  content: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { dashboardApi, lotsApi, sellApi, exchangeRateApi, DashboardSummary, Lot, SellHistory, ExchangeRate, ActionableLot } from '@/lib/api';
+import { dashboardApi, lotsApi, sellApi, exchangeRateApi, noticesApi, DashboardSummary, Lot, SellHistory, ExchangeRate, ActionableLot, Notice } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { formatKrw, formatRate, rateColor, formatDate } from '@/lib/format';
 
@@ -13,6 +13,8 @@ export default function DashboardPage() {
   const [recentSells, setRecentSells] = useState<SellHistory[]>([]);
   const [exchangeRate, setExchangeRate] = useState<ExchangeRate | null>(null);
   const [actionableLots, setActionableLots] = useState<ActionableLot[]>([]);
+  const [notices, setNotices] = useState<Notice[]>([]);
+  const [dismissedNotices, setDismissedNotices] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -23,13 +25,15 @@ export default function DashboardPage() {
       sellApi.history(),
       exchangeRateApi.current(),
       dashboardApi.actionableLots(),
+      noticesApi.active(),
     ])
-      .then(([sumRes, lotsRes, sellsRes, fxRes, actionRes]) => {
+      .then(([sumRes, lotsRes, sellsRes, fxRes, actionRes, noticesRes]) => {
         setSummary(sumRes.data);
         setLots(lotsRes.data.filter((l) => l.remainingQuantity > 0).slice(0, 5));
         setRecentSells(sellsRes.data.slice(0, 4));
         setExchangeRate(fxRes.data);
         setActionableLots(actionRes.data.slice(0, 5));
+        setNotices(noticesRes.data);
       })
       .catch(() => setError('데이터를 불러오지 못했습니다.'))
       .finally(() => setLoading(false));
@@ -44,8 +48,34 @@ export default function DashboardPage() {
   const unrealized = summary?.unrealizedProfitKrw ?? 0;
   const realized = summary?.realizedProfitKrw ?? 0;
 
+  const visibleNotices = notices.filter((n) => !dismissedNotices.has(n.id));
+
   return (
     <div>
+      {/* Notices */}
+      {visibleNotices.map((notice) => (
+        <div key={notice.id} style={s.noticeBanner}>
+          <div style={s.noticeIcon}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+              <path d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </div>
+          <div style={s.noticeContent}>
+            <span style={s.noticeTitle}>{notice.title}</span>
+            {notice.content && <span style={s.noticeText}>{notice.content}</span>}
+          </div>
+          <button
+            onClick={() => setDismissedNotices((prev) => new Set([...prev, notice.id]))}
+            style={s.noticeDismiss}
+            aria-label="닫기"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+              <path d="M6 18L18 6M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+            </svg>
+          </button>
+        </div>
+      ))}
+
       {/* Header */}
       <div style={s.header}>
         <div>
@@ -445,4 +475,47 @@ const s: Record<string, React.CSSProperties> = {
   },
   fxPair: { fontSize: 12, fontWeight: 600, color: 'var(--fg-muted)', textTransform: 'uppercase' as const, letterSpacing: '0.05em', marginBottom: 4 },
   fxValue: { fontFamily: 'var(--font-mono)', fontSize: 20, fontWeight: 500, color: 'var(--fg-primary)' },
+  noticeBanner: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: 10,
+    background: 'rgba(255,107,53,0.08)',
+    border: '1px solid rgba(255,107,53,0.25)',
+    borderRadius: 10,
+    padding: '12px 16px',
+    marginBottom: 12,
+  },
+  noticeIcon: {
+    color: 'var(--color-orange-500)',
+    flexShrink: 0,
+    marginTop: 1,
+  },
+  noticeContent: {
+    flex: 1,
+    minWidth: 0,
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: 2,
+  },
+  noticeTitle: {
+    fontSize: 13,
+    fontWeight: 600,
+    color: 'var(--fg-primary)',
+  },
+  noticeText: {
+    fontSize: 12,
+    color: 'var(--fg-secondary)',
+    lineHeight: 1.5,
+    whiteSpace: 'pre-wrap' as const,
+  },
+  noticeDismiss: {
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    color: 'var(--fg-muted)',
+    padding: 2,
+    flexShrink: 0,
+    display: 'flex',
+    alignItems: 'center',
+  },
 };
