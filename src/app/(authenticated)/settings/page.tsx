@@ -194,37 +194,119 @@ function ErrorLogRow({ log }: { log: ErrorLogItem }) {
 
 // ── 환율 관리 ────────────────────────────────────────────
 
+type RateRow = { id: string; date: string; usdToKrw: number; createdAt: string };
+
 function ExchangeRateTab() {
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const todayStr = new Date().toISOString().split('T')[0];
+  const [date, setDate] = useState(todayStr);
   const [rate, setRate] = useState('');
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
 
+  const [rows, setRows] = useState<RateRow[]>([]);
+  const [listLoading, setListLoading] = useState(true);
+  const [searchDate, setSearchDate] = useState('');
+  const [searchResult, setSearchResult] = useState<string | null>(null);
+  const [searching, setSearching] = useState(false);
+
+  const loadList = useCallback(() => {
+    setListLoading(true);
+    adminApi.rateList(60).then((r) => setRows(r.data)).catch(() => {}).finally(() => setListLoading(false));
+  }, []);
+
+  useEffect(() => { loadList(); }, [loadList]);
+
   const save = async () => {
     if (!date || !rate) return;
+    if (date > todayStr) { setMsg('날짜는 오늘 이전이어야 합니다.'); return; }
+    const rateNum = parseFloat(rate);
+    if (!rateNum || rateNum <= 0) { setMsg('환율은 0보다 커야 합니다.'); return; }
     setSaving(true); setMsg('');
     try {
-      await adminApi.upsertRate(date, parseFloat(rate));
+      await adminApi.upsertRate(date, rateNum);
       setMsg('저장 완료');
-    } catch { setMsg('저장 실패'); } finally { setSaving(false); }
+      loadList();
+    } catch (e: any) {
+      setMsg(e?.response?.data?.message ?? '저장 실패');
+    } finally { setSaving(false); }
+  };
+
+  const search = async () => {
+    if (!searchDate) return;
+    setSearching(true); setSearchResult(null);
+    try {
+      const res = await exchangeRateApi.byDate(searchDate);
+      const src = res.data.source === 'db' ? 'DB 저장값' : '현재 환율 (해당 날짜 없음)';
+      setSearchResult(`${res.data.usdToKrw.toLocaleString('ko-KR')}원  ·  ${src}`);
+    } catch {
+      setSearchResult('조회 실패');
+    } finally { setSearching(false); }
   };
 
   return (
-    <Section title="기준환율 수동 저장">
-      <div style={{ padding: '16px 0', display: 'flex', flexDirection: 'column' as const, gap: 12 }}>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' as const }}>
-          <Field label="날짜">
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={inputStyle} />
-          </Field>
-          <Field label="USD/KRW">
-            <input type="number" value={rate} onChange={(e) => setRate(e.target.value)} placeholder="1450.00" style={{ ...inputStyle, width: 120 }} />
-          </Field>
-          <SaveBtn onClick={save} saving={saving} />
+    <>
+      <Section title="기준환율 수동 저장">
+        <div style={{ padding: '16px 0', display: 'flex', flexDirection: 'column' as const, gap: 12 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' as const }}>
+            <Field label="날짜">
+              <input type="date" value={date} max={todayStr} onChange={(e) => setDate(e.target.value)} style={inputStyle} />
+            </Field>
+            <Field label="USD/KRW">
+              <input type="number" value={rate} onChange={(e) => setRate(e.target.value)} placeholder="1450.00" style={{ ...inputStyle, width: 120 }} />
+            </Field>
+            <SaveBtn onClick={save} saving={saving} />
+          </div>
+          {msg && <span style={{ fontSize: 12, color: msg.includes('완료') ? 'var(--color-green-600, #16a34a)' : 'var(--color-red-600, #dc2626)' }}>{msg}</span>}
+          <p style={{ fontSize: 12, color: 'var(--fg-muted)', margin: 0 }}>해당 날짜 데이터가 이미 있으면 덮어씁니다.</p>
         </div>
-        {msg && <span style={{ fontSize: 12, color: msg.includes('완료') ? 'var(--color-green)' : 'var(--color-red)' }}>{msg}</span>}
-        <p style={{ fontSize: 12, color: 'var(--fg-muted)', margin: 0 }}>해당 날짜 데이터가 이미 있으면 덮어씁니다.</p>
-      </div>
-    </Section>
+      </Section>
+
+      <Section title="날짜 검색">
+        <div style={{ padding: '16px 0', display: 'flex', flexDirection: 'column' as const, gap: 10 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' as const }}>
+            <Field label="조회할 날짜">
+              <input type="date" value={searchDate} onChange={(e) => setSearchDate(e.target.value)} style={inputStyle} />
+            </Field>
+            <button onClick={search} disabled={searching || !searchDate}
+              style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid var(--border-default)', background: 'var(--bg-muted)', color: 'var(--fg-secondary)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font-sans)' }}>
+              {searching ? '조회 중...' : '조회'}
+            </button>
+          </div>
+          {searchResult && (
+            <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--fg-primary)', padding: '8px 12px', background: 'var(--bg-muted)', borderRadius: 8 }}>
+              {searchDate} → {searchResult}
+            </div>
+          )}
+        </div>
+      </Section>
+
+      <Section title={`저장된 환율 (최근 ${rows.length}건)`}>
+        <div style={{ padding: '12px 0' }}>
+          {listLoading ? <Muted>불러오는 중...</Muted> : rows.length === 0 ? <Muted>저장된 환율이 없습니다.</Muted> : (
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--border-muted)' }}>
+                  {['날짜', 'USD/KRW', '저장 시각'].map((h) => (
+                    <th key={h} style={{ textAlign: 'left', padding: '6px 8px', fontSize: 11, color: 'var(--fg-muted)', fontWeight: 600 }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.id} style={{ borderBottom: '1px solid var(--border-muted)' }}>
+                    <td style={{ padding: '8px 8px', fontFamily: 'var(--font-mono)', color: 'var(--fg-primary)' }}>{r.date}</td>
+                    <td style={{ padding: '8px 8px', fontFamily: 'var(--font-mono)', color: 'var(--fg-primary)', fontWeight: 600 }}>
+                      {parseFloat(String(r.usdToKrw)).toLocaleString('ko-KR')}원
+                    </td>
+                    <td style={{ padding: '8px 8px', color: 'var(--fg-muted)' }}>{formatDate(r.createdAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </Section>
+    </>
   );
 }
 

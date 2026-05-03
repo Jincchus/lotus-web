@@ -409,8 +409,12 @@ function LotRegisterModal({ stock, currentPrice, brokers, onClose }: {
   const finalQty = inputMode === 'qty' ? parseFloat(form.quantity) : derivedQty;
 
   const handleSubmit = async () => {
-    if (!form.buyPrice || !form.brokerId) {
-      setError('매수가와 증권사는 필수입니다.');
+    if (!form.brokerId) {
+      setError('증권사는 필수입니다.');
+      return;
+    }
+    if (!form.buyPrice || buyPriceNum <= 0) {
+      setError('매수가는 0보다 커야 합니다.');
       return;
     }
     if (inputMode === 'qty' && !form.quantity) {
@@ -423,6 +427,10 @@ function LotRegisterModal({ stock, currentPrice, brokers, onClose }: {
     }
     if (!isFinite(finalQty) || finalQty <= 0) {
       setError('유효한 수량이 계산되지 않았습니다. 매수가와 금액을 확인해 주세요.');
+      return;
+    }
+    if (form.buyDate > todayStr) {
+      setError('매수일은 오늘 이전 날짜여야 합니다.');
       return;
     }
     setSubmitting(true);
@@ -554,7 +562,7 @@ function LotRegisterModal({ stock, currentPrice, brokers, onClose }: {
               </div>
 
               <Field label="매수일 *">
-                <input type="date" value={form.buyDate} onChange={(e) => setForm((f) => ({ ...f, buyDate: e.target.value }))} style={inputStyle} />
+                <input type="date" value={form.buyDate} max={todayStr} onChange={(e) => setForm((f) => ({ ...f, buyDate: e.target.value }))} style={inputStyle} />
               </Field>
               {isUSD && (
                 <Field label="매수 시점 환율 (USD/KRW)">

@@ -145,6 +145,7 @@ export const adminApi = {
   deleteNotice:    (id: string)   => api.delete(`/notices/${id}`),
   // 환율
   upsertRate:      (date: string, usdToKrw: number) => api.put(`/exchange-rates/${date}`, { usdToKrw }),
+  rateList:        (limit = 60) => api.get<{ id: string; date: string; usdToKrw: number; createdAt: string }[]>(`/exchange-rates?limit=${limit}`),
   // 활성 공지 (대시보드용)
 };
 

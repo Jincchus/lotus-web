@@ -377,8 +377,16 @@ function SellModal({ lot, onClose, onSuccess }: {
   const expectedProfit = (price - lot.purchasePrice) * qty;
 
   const handleSubmit = async () => {
-    if (!sellPrice || qty <= 0 || qty > remaining) {
+    if (!sellPrice || price <= 0) {
+      setError('매도가는 0보다 커야 합니다.');
+      return;
+    }
+    if (qty <= 0 || qty > remaining) {
       setError(`수량은 0 초과 ${remaining} 이하여야 합니다.`);
+      return;
+    }
+    if (sellDate > todayLocal) {
+      setError('매도일은 오늘 이전 날짜여야 합니다.');
       return;
     }
     setSubmitting(true);
@@ -468,7 +476,7 @@ function SellModal({ lot, onClose, onSuccess }: {
           )}
 
           <Field label="매도일">
-            <input type="date" value={sellDate} onChange={(e) => setSellDate(e.target.value)} style={inputStyle} />
+            <input type="date" value={sellDate} max={todayLocal} onChange={(e) => setSellDate(e.target.value)} style={inputStyle} />
           </Field>
         </div>
 
@@ -514,6 +522,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 function EditLotModal({ lot, onClose, onSuccess }: {
   lot: Lot; onClose: () => void; onSuccess: () => void;
 }) {
+  const todayStr = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; })();
   const soldQty = Number(lot.initialQuantity) - Number(lot.remainingQuantity);
   const [brokers, setBrokers] = useState<Broker[]>([]);
   const [form, setForm] = useState({
@@ -533,10 +542,11 @@ function EditLotModal({ lot, onClose, onSuccess }: {
   const handleSubmit = async () => {
     const purchasePrice = parseFloat(form.purchasePrice);
     const initialQuantity = parseFloat(form.initialQuantity);
-    if (!purchasePrice || purchasePrice <= 0) { setError('매수가를 입력해주세요.'); return; }
-    if (!initialQuantity || initialQuantity <= 0) { setError('수량을 입력해주세요.'); return; }
+    if (!purchasePrice || purchasePrice <= 0) { setError('매수가는 0보다 커야 합니다.'); return; }
+    if (!initialQuantity || initialQuantity <= 0) { setError('수량은 0보다 커야 합니다.'); return; }
     if (initialQuantity < soldQty) { setError(`이미 ${soldQty}주 매도됐습니다. 수량은 ${soldQty}주 이상이어야 합니다.`); return; }
     if (!form.purchaseDate) { setError('매수일을 입력해주세요.'); return; }
+    if (form.purchaseDate > todayStr) { setError('매수일은 오늘 이전 날짜여야 합니다.'); return; }
     if (!form.brokerId) { setError('증권사를 선택해주세요.'); return; }
 
     setSubmitting(true);
@@ -585,7 +595,7 @@ function EditLotModal({ lot, onClose, onSuccess }: {
           </Field>
 
           <Field label="매수일">
-            <input type="date" value={form.purchaseDate} onChange={(e) => setForm((f) => ({ ...f, purchaseDate: e.target.value }))} style={inputStyle} />
+            <input type="date" value={form.purchaseDate} max={todayStr} onChange={(e) => setForm((f) => ({ ...f, purchaseDate: e.target.value }))} style={inputStyle} />
           </Field>
 
           <Field label="증권사">
