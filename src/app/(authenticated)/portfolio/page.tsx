@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { lotsApi, Lot } from '@/lib/api';
 import { formatKrw, formatRate, rateColor } from '@/lib/format';
+import { downloadCsv } from '@/lib/csv';
 
 interface StockGroup {
   symbol: string;
@@ -47,6 +48,31 @@ export default function PortfolioPage() {
 
   const filtered = filter === 'ALL' ? groups : groups.filter((g) => g.market === filter);
 
+  function handleCsvDownload() {
+    const today = new Date().toISOString().split('T')[0];
+    const header = ['종목명', '심볼', '시장', '통화', '증권사', '매수가', '매수일', '초기수량', '잔여수량', '현재가', '수익률(%)', '평가금액'];
+    const rows: string[][] = [header];
+    for (const g of filtered) {
+      for (const lot of g.lots) {
+        rows.push([
+          lot.stockName,
+          lot.symbol,
+          lot.market,
+          lot.currency,
+          lot.broker?.name ?? '',
+          String(lot.purchasePrice),
+          lot.purchaseDate,
+          String(lot.initialQuantity),
+          String(lot.remainingQuantity),
+          lot.currentPrice != null ? String(lot.currentPrice) : '',
+          lot.returnRate != null ? lot.returnRate.toFixed(2) : '',
+          lot.evaluationAmount != null ? String(Math.round(lot.evaluationAmount)) : '',
+        ]);
+      }
+    }
+    downloadCsv(`portfolio_${today}.csv`, rows);
+  }
+
   return (
     <div>
       {/* Header */}
@@ -55,7 +81,10 @@ export default function PortfolioPage() {
           <h1 style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em' }}>포트폴리오</h1>
           <p style={{ fontSize: 13, color: 'var(--fg-secondary)', marginTop: 2 }}>{groups.length}개 종목 보유 중</p>
         </div>
-        <Link href="/search" style={btnStyle}>+ Lot 추가</Link>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={handleCsvDownload} disabled={filtered.length === 0} style={csvBtnStyle}>CSV 저장</button>
+          <Link href="/search" style={btnStyle}>+ Lot 추가</Link>
+        </div>
       </div>
 
       {/* Market filter */}
@@ -131,6 +160,13 @@ const cardStyle: React.CSSProperties = {
   background: 'var(--bg-surface)', border: '1px solid var(--border-default)',
   borderRadius: 12, padding: '16px 20px', boxShadow: 'var(--shadow-md)',
   transition: 'box-shadow 150ms', cursor: 'pointer',
+};
+const csvBtnStyle: React.CSSProperties = {
+  display: 'inline-flex', alignItems: 'center', gap: 6,
+  background: 'var(--bg-surface)', color: 'var(--fg-secondary)',
+  border: '1px solid var(--border-default)',
+  padding: '8px 14px', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer',
+  fontFamily: 'var(--font-sans)',
 };
 const iconStyle: React.CSSProperties = {
   width: 40, height: 40, borderRadius: 12, display: 'flex', alignItems: 'center',

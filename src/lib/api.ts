@@ -58,6 +58,7 @@ export const authApi = {
   refresh: () => api.post('/auth/refresh'),
   logout: () => api.post('/auth/logout'),
   googleLoginUrl: () => `${BACKEND_URL}/api/auth/google`,
+  updateMe: (data: { defaultStrategyId: string | null }) => api.patch<User>('/auth/me', data),
 };
 
 // ── Dashboard ───────────────────────────────────────────
@@ -111,6 +112,8 @@ export const stocksApi = {
     api.get<StockSearchResult[]>('/stocks/search', { params: { query, market } }),
   price: (symbol: string, market: string) =>
     api.get<PriceData>(`/stocks/price`, { params: { symbol, market } }),
+  priceAtDate: (symbol: string, market: string, date: string) =>
+    api.get<{ price: number; date: string } | null>('/stocks/price-at-date', { params: { symbol, market, date } }),
 };
 
 // ── Notices (대시보드용) ─────────────────────────────────
@@ -162,6 +165,7 @@ export interface User {
   name: string;
   profileImage?: string;
   role: 'user' | 'admin';
+  defaultStrategyId?: string | null;
 }
 
 export interface DashboardSummary {

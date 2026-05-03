@@ -382,6 +382,8 @@ function LotRegisterModal({ stock, currentPrice, brokers, onClose }: {
   });
   const [exchangeRate, setExchangeRate] = useState('');
   const [exchangeRateSource, setExchangeRateSource] = useState<'db' | 'current' | null>(null);
+  const [historicalPrice, setHistoricalPrice] = useState<{ price: number; date: string } | null>(null);
+  const [historicalPriceLoading, setHistoricalPriceLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
@@ -393,6 +395,25 @@ function LotRegisterModal({ stock, currentPrice, brokers, onClose }: {
       setExchangeRateSource(res.data.source);
     }).catch(() => {});
   }, [form.buyDate, isUSD]);
+
+  useEffect(() => {
+    if (!form.buyDate) return;
+    setHistoricalPrice(null);
+    setHistoricalPriceLoading(true);
+    stocksApi.priceAtDate(stock.symbol, stock.market, form.buyDate)
+      .then((res) => {
+        if (res.data) {
+          setHistoricalPrice(res.data);
+          const rounded = stock.currency === 'KRW'
+            ? String(Math.round(res.data.price))
+            : String(res.data.price);
+          setForm((f) => ({ ...f, buyPrice: rounded }));
+        }
+      })
+      .catch(() => {})
+      .finally(() => setHistoricalPriceLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.buyDate]);
 
   const buyPriceNum = parseFloat(form.buyPrice) || 0;
 
@@ -489,10 +510,26 @@ function LotRegisterModal({ stock, currentPrice, brokers, onClose }: {
                 <input
                   type="number"
                   value={form.buyPrice}
-                  onChange={(e) => setForm((f) => ({ ...f, buyPrice: e.target.value }))}
+                  onChange={(e) => {
+                    setForm((f) => ({ ...f, buyPrice: e.target.value }));
+                    setHistoricalPrice(null);
+                  }}
                   placeholder={stock.currency === 'USD' ? 'USD' : 'KRW'}
                   style={inputStyle}
                 />
+                {historicalPriceLoading && (
+                  <div style={{ fontSize: 11, color: 'var(--fg-muted)', marginTop: 5, display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <div style={{ width: 10, height: 10, border: '1.5px solid var(--color-orange-500)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
+                    종가 조회 중...
+                  </div>
+                )}
+                {!historicalPriceLoading && historicalPrice && (
+                  <div style={{ fontSize: 11, color: 'var(--fg-muted)', marginTop: 5 }}>
+                    {historicalPrice.date === form.buyDate
+                      ? `📅 ${historicalPrice.date} 종가 자동 입력 · 직접 수정 가능`
+                      : `⚠️ ${form.buyDate} 데이터 없음 → ${historicalPrice.date} 종가 사용 · 직접 수정 가능`}
+                  </div>
+                )}
               </Field>
 
               {/* 수량 / 금액 탭 */}

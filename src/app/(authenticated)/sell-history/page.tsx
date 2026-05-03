@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { sellApi, SellHistory, MonthlyStats } from '@/lib/api';
 import { formatKrw, formatDate, formatRate } from '@/lib/format';
+import { downloadCsv } from '@/lib/csv';
 
 interface GroupedSells {
   yearMonth: string;
@@ -45,6 +46,29 @@ export default function SellHistoryPage() {
 
   const groups = groupByMonth(filtered);
 
+  function handleCsvDownload() {
+    const today = new Date().toISOString().split('T')[0];
+    const marketLabel = marketFilter === 'ALL' ? '전체' : marketFilter;
+    const header = ['종목명', '심볼', '시장', '통화', '매도일', '매도수량', '매도가', '실현수익(원화)', '원화매도금액', '트리거수익률(%)', '매도유형'];
+    const rows: string[][] = [header];
+    for (const h of filtered) {
+      rows.push([
+        h.stockName,
+        h.symbol,
+        h.market,
+        h.currency,
+        h.sellDate,
+        String(h.sellQuantity),
+        String(h.sellPrice),
+        String(Math.round(h.realizedProfitKrw ?? h.realizedProfit)),
+        String(Math.round(h.sellAmountKrw ?? 0)),
+        h.triggerProfitRate != null ? h.triggerProfitRate.toFixed(2) : '',
+        h.sellType === 'STRATEGY' ? '전략매도' : '수동매도',
+      ]);
+    }
+    downloadCsv(`sell-history_${yearFilter}_${marketLabel}_${today}.csv`, rows);
+  }
+
   // 월별 통계는 백엔드 monthlyStats 기준 (KRW 환산 완료)
   const totalRealized = monthlyStats.reduce((sum, m) => sum + m.realizedProfit, 0);
   const totalSell = monthlyStats.reduce((sum, m) => sum + m.totalSellAmount, 0);
@@ -52,9 +76,15 @@ export default function SellHistoryPage() {
   return (
     <div>
       {/* Header */}
-      <div style={{ marginBottom: 20 }}>
-        <h1 style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em' }}>매도 히스토리</h1>
-        <p style={{ fontSize: 13, color: 'var(--fg-secondary)', marginTop: 2 }}>{yearFilter}년 · {filtered.length}건 / 전체 {histories.length}건</p>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20 }}>
+        <div>
+          <h1 style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em' }}>매도 히스토리</h1>
+          <p style={{ fontSize: 13, color: 'var(--fg-secondary)', marginTop: 2 }}>{yearFilter}년 · {filtered.length}건 / 전체 {histories.length}건</p>
+        </div>
+        <button onClick={handleCsvDownload} disabled={filtered.length === 0}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'var(--bg-surface)', color: 'var(--fg-secondary)', border: '1px solid var(--border-default)', padding: '8px 14px', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: filtered.length === 0 ? 'not-allowed' : 'pointer', fontFamily: 'var(--font-sans)', opacity: filtered.length === 0 ? 0.5 : 1 }}>
+          CSV 저장
+        </button>
       </div>
 
       {/* Stats summary — monthlyStats 기준 KRW 환산 합계 */}

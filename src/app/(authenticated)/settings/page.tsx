@@ -2,8 +2,8 @@
 
 import { useAuth } from '@/lib/auth-context';
 import {
-  adminApi, exchangeRateApi, noticesApi,
-  AdminUser, AdminStock, ErrorLogItem, Notice, SystemStatus,
+  authApi, adminApi, exchangeRateApi, strategiesApi,
+  AdminUser, AdminStock, ErrorLogItem, Notice, SystemStatus, Strategy,
 } from '@/lib/api';
 import { useEffect, useState, useCallback } from 'react';
 import { formatDate } from '@/lib/format';
@@ -100,6 +100,10 @@ export default function SettingsPage() {
             </div>
           </Section>
 
+          <Section title="기본 전략">
+            <DefaultStrategySection currentDefaultId={user?.defaultStrategyId ?? null} />
+          </Section>
+
           <Section title="계정 관리">
             <div style={{ padding: '16px 0' }}>
               <button onClick={logout}
@@ -135,6 +139,69 @@ export default function SettingsPage() {
           {adminTab === 'stocks'       && <StocksTab />}
           {adminTab === 'notices'      && <NoticesTab />}
           {adminTab === 'system'       && <SystemTab />}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── 기본 전략 ─────────────────────────────────────────────
+
+function DefaultStrategySection({ currentDefaultId }: { currentDefaultId: string | null }) {
+  const [strategies, setStrategies] = useState<Strategy[]>([]);
+  const [selected, setSelected] = useState<string>('');
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState('');
+
+  useEffect(() => {
+    strategiesApi.list().then((r) => {
+      setStrategies(r.data);
+      setSelected(currentDefaultId ?? '');
+    }).catch(() => {});
+  }, [currentDefaultId]);
+
+  const save = async () => {
+    setSaving(true); setMsg('');
+    try {
+      await authApi.updateMe({ defaultStrategyId: selected || null });
+      setMsg('저장 완료');
+    } catch {
+      setMsg('저장 실패');
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <div style={{ padding: '16px 0', display: 'flex', flexDirection: 'column' as const, gap: 12 }}>
+      <p style={{ fontSize: 13, color: 'var(--fg-secondary)', margin: 0 }}>
+        Lot에 전략을 적용할 때 기본으로 선택될 전략을 지정합니다.
+      </p>
+      {strategies.length === 0 ? (
+        <Muted>등록된 전략이 없습니다. 전략 페이지에서 먼저 전략을 만들어 주세요.</Muted>
+      ) : (
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' as const }}>
+          <select
+            value={selected}
+            onChange={(e) => setSelected(e.target.value)}
+            style={{ ...inputStyle, minWidth: 200 }}
+          >
+            <option value="">없음 (기본 전략 사용 안 함)</option>
+            {strategies.map((s) => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </select>
+          <SaveBtn onClick={save} saving={saving} />
+        </div>
+      )}
+      {msg && (
+        <span style={{ fontSize: 12, color: msg.includes('완료') ? 'var(--color-green-600, #16a34a)' : 'var(--color-red-600, #dc2626)' }}>
+          {msg}
+        </span>
+      )}
+      {selected && strategies.length > 0 && (
+        <div style={{ fontSize: 12, color: 'var(--fg-muted)' }}>
+          선택: {strategies.find((s) => s.id === selected)?.description || strategies.find((s) => s.id === selected)?.name}
+          {' · '}
+          {strategies.find((s) => s.id === selected)?.rules.length ?? 0}개 규칙
         </div>
       )}
     </div>
