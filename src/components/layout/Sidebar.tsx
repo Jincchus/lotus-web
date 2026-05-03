@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
+import { useIsMobile } from '@/lib/use-is-mobile';
 
 const NAV_ITEMS = [
   {
@@ -25,13 +26,116 @@ const NAV_ITEMS = [
   },
 ];
 
-export default function Sidebar() {
+interface SidebarProps {
+  mobileOpen?: boolean;
+  onMobileClose?: () => void;
+}
+
+export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
   const pathname = usePathname();
   const { user, logout } = useAuth();
+  const isMobile = useIsMobile();
 
   const w = collapsed ? 64 : 220;
 
+  if (isMobile) {
+    return (
+      <>
+        {/* Backdrop */}
+        {mobileOpen && (
+          <div
+            onClick={onMobileClose}
+            style={s.backdrop}
+          />
+        )}
+        {/* Drawer */}
+        <aside
+          style={{
+            ...s.sidebar,
+            width: 220,
+            minWidth: 220,
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            height: '100vh',
+            zIndex: 200,
+            transform: mobileOpen ? 'translateX(0)' : 'translateX(-100%)',
+            transition: 'transform 280ms cubic-bezier(0.4,0,0.2,1)',
+            boxShadow: mobileOpen ? '4px 0 24px rgba(0,0,0,0.4)' : 'none',
+          }}
+        >
+          {/* Header */}
+          <div style={s.header}>
+            <div style={s.logo}>
+              <div style={s.logoMark}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                  <path d="M3 17l4-8 4 4 4-6 4 10" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </div>
+              <span style={s.logoText}>Lotus</span>
+            </div>
+            {/* Close button */}
+            <button onClick={onMobileClose} style={s.toggle} title="닫기">
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Nav */}
+          <nav style={s.nav}>
+            {NAV_ITEMS.map((group) => (
+              <div key={group.section} style={s.section}>
+                <div style={s.sectionLabel}>{group.section}</div>
+                {group.items.map(({ href, label, icon: Icon }) => {
+                  const active = pathname === href || pathname.startsWith(href + '/');
+                  return (
+                    <Link
+                      key={href}
+                      href={href}
+                      onClick={onMobileClose}
+                      style={{ ...s.navItem, ...(active ? s.navItemActive : {}) }}
+                    >
+                      <Icon active={active} />
+                      <span style={s.navLabel}>{label}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            ))}
+          </nav>
+
+          {/* Footer */}
+          <div style={s.footer}>
+            {user && (
+              <div style={s.userRow}>
+                <div style={s.avatar}>
+                  {user.profileImage ? (
+                    <img src={user.profileImage} alt="" style={{ width: 28, height: 28, borderRadius: '50%' }} />
+                  ) : (
+                    <span style={s.avatarInitial}>{user.name?.[0] ?? 'U'}</span>
+                  )}
+                </div>
+                <div style={s.userInfo}>
+                  <div style={s.userName}>{user.name}</div>
+                  <div style={s.userEmail}>{user.email}</div>
+                </div>
+              </div>
+            )}
+            <button onClick={logout} style={s.logoutBtn} title="로그아웃">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              <span>로그아웃</span>
+            </button>
+          </div>
+        </aside>
+      </>
+    );
+  }
+
+  // Desktop
   return (
     <aside style={{ ...s.sidebar, width: w, minWidth: w }}>
       {/* Header */}
@@ -172,6 +276,12 @@ function IconSettings({ active }: { active: boolean }) {
 }
 
 const s: Record<string, React.CSSProperties> = {
+  backdrop: {
+    position: 'fixed',
+    inset: 0,
+    background: 'rgba(0,0,0,0.55)',
+    zIndex: 199,
+  },
   sidebar: {
     background: 'var(--bg-sidebar)',
     display: 'flex',
