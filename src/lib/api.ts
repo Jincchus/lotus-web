@@ -133,6 +133,14 @@ export const brokersApi = {
   list: () => api.get<Broker[]>('/brokers'),
 };
 
+// ── Themes ──────────────────────────────────────────────
+export const themesApi = {
+  list: () => api.get<Theme[]>('/themes'),
+  create: (body: { name: string }) => api.post<Theme>('/themes', body),
+  update: (id: string, body: { name: string }) => api.patch<Theme>(`/themes/${id}`, body),
+  delete: (id: string) => api.delete(`/themes/${id}`),
+};
+
 // ── Admin ────────────────────────────────────────────────
 export const adminApi = {
   errorLogs:       (limit = 100) => api.get<ErrorLogItem[]>(`/admin/error-logs?limit=${limit}`),
@@ -206,11 +214,20 @@ export interface Lot {
   purchaseDate: string;
   memo?: string | null;
   broker: { id: string; name: string };
+  themeId: string | null;
+  themeName: string | null;
+  appliedStrategyName: string | null;
   positionRules?: PositionRule[];
   sellHistories?: SellHistory[];
   currentPrice: number | null;
   returnRate: number | null;
   evaluationAmount: number | null;
+  createdAt: string;
+}
+
+export interface Theme {
+  id: string;
+  name: string;
   createdAt: string;
 }
 
@@ -222,6 +239,7 @@ export interface CreateLotDto {
   purchaseDate: string;
   brokerId: string;
   exchangeRateAtPurchase?: number;
+  themeId?: string;
   memo?: string;
 }
 
@@ -230,6 +248,7 @@ export interface UpdateLotDto {
   purchaseDate?: string;
   initialQuantity?: number;
   brokerId?: string;
+  themeId?: string | null;
   memo?: string;
 }
 

@@ -20,6 +20,7 @@ const NAV_ITEMS = [
     items: [
       { href: '/search', label: '종목 검색', icon: IconSearch },
       { href: '/strategies', label: '매도 전략', icon: IconStrategy },
+      { href: '/themes', label: '테마 관리', icon: IconTheme },
       { href: '/watchlist', label: '관심종목', icon: IconWatchlist },
       { href: '/settings', label: '설정', icon: IconSettings },
     ],
@@ -262,6 +263,15 @@ function IconStrategy({ active }: { active: boolean }) {
       <path d="M9 19V6l12-3v13" stroke={active ? 'var(--color-orange-500)' : 'currentColor'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
       <circle cx="6" cy="19" r="3" stroke={active ? 'var(--color-orange-500)' : 'currentColor'} strokeWidth="2"/>
       <circle cx="18" cy="16" r="3" stroke={active ? 'var(--color-orange-500)' : 'currentColor'} strokeWidth="2"/>
+    </svg>
+  );
+}
+
+function IconTheme({ active }: { active: boolean }) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
+      <path d="M7 7h10v10H7z" stroke={active ? 'var(--color-orange-500)' : 'currentColor'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M7 7L5 5M17 7l2-2M17 17l2 2M7 17l-2 2" stroke={active ? 'var(--color-orange-500)' : 'currentColor'} strokeWidth="2" strokeLinecap="round"/>
     </svg>
   );
 }

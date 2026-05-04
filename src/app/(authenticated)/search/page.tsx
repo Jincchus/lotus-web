@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { stocksApi, brokersApi, lotsApi, watchlistApi, exchangeRateApi, StockSearchResult, Broker, PriceData, WatchlistItem } from '@/lib/api';
+import { stocksApi, brokersApi, lotsApi, watchlistApi, exchangeRateApi, themesApi, StockSearchResult, Broker, PriceData, WatchlistItem, Theme, Lot } from '@/lib/api';
 import { formatKrw, rateColor } from '@/lib/format';
 
 const POPULAR_STOCKS: Record<'KR' | 'US', StockSearchResult[]> = {
@@ -334,6 +334,7 @@ export default function SearchPage() {
           onClose={() => setModalOpen(false)}
         />
       )}
+
     </div>
   );
 }
@@ -378,6 +379,7 @@ function LotRegisterModal({ stock, currentPrice, brokers, onClose }: {
     totalAmount: '',
     buyDate: todayStr,
     brokerId: brokers[0]?.id ?? '',
+    themeId: '',
     memo: '',
   });
   const [exchangeRate, setExchangeRate] = useState('');
@@ -387,6 +389,16 @@ function LotRegisterModal({ stock, currentPrice, brokers, onClose }: {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [themes, setThemes] = useState<Theme[]>([]);
+  const [existingLots, setExistingLots] = useState<Lot[]>([]);
+  const [themeConflict, setThemeConflict] = useState<{ lots: Lot[]; pendingThemeId: string; pendingThemeName: string } | null>(null);
+
+  useEffect(() => {
+    themesApi.list().then((r) => setThemes(r.data)).catch(() => {});
+    lotsApi.bySymbol(stock.symbol, stock.market)
+      .then((r) => setExistingLots(r.data.filter((l) => l.remainingQuantity > 0)))
+      .catch(() => {});
+  }, [stock.symbol, stock.market]);
 
   useEffect(() => {
     if (!isUSD) return;
@@ -415,45 +427,32 @@ function LotRegisterModal({ stock, currentPrice, brokers, onClose }: {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.buyDate]);
 
+  const handleThemeChange = (themeId: string) => {
+    if (!themeId) {
+      setForm((f) => ({ ...f, themeId: '' }));
+      return;
+    }
+    const conflicting = existingLots.filter((l) => l.themeId && l.themeId !== themeId);
+    if (conflicting.length > 0) {
+      const themeName = themes.find((t) => t.id === themeId)?.name ?? themeId;
+      setThemeConflict({ lots: conflicting, pendingThemeId: themeId, pendingThemeName: themeName });
+    } else {
+      setForm((f) => ({ ...f, themeId }));
+    }
+  };
+
   const buyPriceNum = parseFloat(form.buyPrice) || 0;
-
-  // 금액 모드: 수량 = 금액 ÷ 매수가
-  const derivedQty = inputMode === 'amount' && buyPriceNum > 0
-    ? parseFloat(form.totalAmount) / buyPriceNum
-    : NaN;
-
-  // 수량 모드: 총금액 = 매수가 × 수량
-  const derivedAmount = inputMode === 'qty' && buyPriceNum > 0
-    ? buyPriceNum * (parseFloat(form.quantity) || 0)
-    : NaN;
-
+  const derivedQty = inputMode === 'amount' && buyPriceNum > 0 ? parseFloat(form.totalAmount) / buyPriceNum : NaN;
+  const derivedAmount = inputMode === 'qty' && buyPriceNum > 0 ? buyPriceNum * (parseFloat(form.quantity) || 0) : NaN;
   const finalQty = inputMode === 'qty' ? parseFloat(form.quantity) : derivedQty;
 
   const handleSubmit = async () => {
-    if (!form.brokerId) {
-      setError('증권사는 필수입니다.');
-      return;
-    }
-    if (!form.buyPrice || buyPriceNum <= 0) {
-      setError('매수가는 0보다 커야 합니다.');
-      return;
-    }
-    if (inputMode === 'qty' && !form.quantity) {
-      setError('수량을 입력해 주세요.');
-      return;
-    }
-    if (inputMode === 'amount' && !form.totalAmount) {
-      setError('금액을 입력해 주세요.');
-      return;
-    }
-    if (!isFinite(finalQty) || finalQty <= 0) {
-      setError('유효한 수량이 계산되지 않았습니다. 매수가와 금액을 확인해 주세요.');
-      return;
-    }
-    if (form.buyDate > todayStr) {
-      setError('매수일은 오늘 이전 날짜여야 합니다.');
-      return;
-    }
+    if (!form.brokerId) { setError('증권사는 필수입니다.'); return; }
+    if (!form.buyPrice || buyPriceNum <= 0) { setError('매수가는 0보다 커야 합니다.'); return; }
+    if (inputMode === 'qty' && !form.quantity) { setError('수량을 입력해 주세요.'); return; }
+    if (inputMode === 'amount' && !form.totalAmount) { setError('금액을 입력해 주세요.'); return; }
+    if (!isFinite(finalQty) || finalQty <= 0) { setError('유효한 수량이 계산되지 않았습니다.'); return; }
+    if (form.buyDate > todayStr) { setError('매수일은 오늘 이전 날짜여야 합니다.'); return; }
     setSubmitting(true);
     setError('');
     try {
@@ -466,6 +465,7 @@ function LotRegisterModal({ stock, currentPrice, brokers, onClose }: {
         purchaseDate: form.buyDate,
         brokerId: form.brokerId,
         exchangeRateAtPurchase: isUSD && exchangeRateNum > 0 ? exchangeRateNum : undefined,
+        themeId: form.themeId || undefined,
         memo: form.memo || undefined,
       });
       setSuccess(true);
@@ -485,7 +485,7 @@ function LotRegisterModal({ stock, currentPrice, brokers, onClose }: {
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: 24 }}>
-      <div style={{ background: 'var(--bg-surface)', borderRadius: 16, padding: 28, width: '100%', maxWidth: 440, boxShadow: 'var(--shadow-xl)' }}>
+      <div style={{ background: 'var(--bg-surface)', borderRadius: 16, padding: 28, width: '100%', maxWidth: 440, maxHeight: '90vh', overflowY: 'auto', boxShadow: 'var(--shadow-xl)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
           <div>
             <div style={{ fontSize: 16, fontWeight: 700 }}>Lot 등록</div>
@@ -510,10 +510,7 @@ function LotRegisterModal({ stock, currentPrice, brokers, onClose }: {
                 <input
                   type="number"
                   value={form.buyPrice}
-                  onChange={(e) => {
-                    setForm((f) => ({ ...f, buyPrice: e.target.value }));
-                    setHistoricalPrice(null);
-                  }}
+                  onChange={(e) => { setForm((f) => ({ ...f, buyPrice: e.target.value })); setHistoricalPrice(null); }}
                   placeholder={stock.currency === 'USD' ? 'USD' : 'KRW'}
                   style={inputStyle}
                 />
@@ -536,32 +533,21 @@ function LotRegisterModal({ stock, currentPrice, brokers, onClose }: {
               <div>
                 <div style={{ display: 'flex', background: 'var(--bg-muted)', borderRadius: 8, padding: 3, marginBottom: 10, width: 'fit-content' }}>
                   {(['qty', 'amount'] as const).map((mode) => (
-                    <button
-                      key={mode}
-                      onClick={() => setInputMode(mode)}
-                      style={{
-                        padding: '5px 16px', borderRadius: 6, border: 'none', fontSize: 12, fontWeight: 600,
-                        cursor: 'pointer', fontFamily: 'var(--font-sans)',
-                        background: inputMode === mode ? 'var(--bg-surface)' : 'transparent',
-                        color: inputMode === mode ? 'var(--fg-primary)' : 'var(--fg-muted)',
-                        boxShadow: inputMode === mode ? 'var(--shadow-sm)' : 'none',
-                        transition: 'all 150ms',
-                      }}
-                    >
+                    <button key={mode} onClick={() => setInputMode(mode)} style={{
+                      padding: '5px 16px', borderRadius: 6, border: 'none', fontSize: 12, fontWeight: 600,
+                      cursor: 'pointer', fontFamily: 'var(--font-sans)',
+                      background: inputMode === mode ? 'var(--bg-surface)' : 'transparent',
+                      color: inputMode === mode ? 'var(--fg-primary)' : 'var(--fg-muted)',
+                      boxShadow: inputMode === mode ? 'var(--shadow-sm)' : 'none',
+                      transition: 'all 150ms',
+                    }}>
                       {mode === 'qty' ? '수량' : '금액'}
                     </button>
                   ))}
                 </div>
-
                 {inputMode === 'qty' ? (
                   <div>
-                    <input
-                      type="number"
-                      value={form.quantity}
-                      onChange={(e) => setForm((f) => ({ ...f, quantity: e.target.value }))}
-                      placeholder="매수 수량"
-                      style={inputStyle}
-                    />
+                    <input type="number" value={form.quantity} onChange={(e) => setForm((f) => ({ ...f, quantity: e.target.value }))} placeholder="매수 수량" style={inputStyle} />
                     {isFinite(derivedAmount) && derivedAmount > 0 && (
                       <div style={{ fontSize: 11, color: 'var(--fg-muted)', marginTop: 5 }}>
                         총 매수 금액 ≈ <strong style={{ color: 'var(--fg-secondary)' }}>{formatAmount(derivedAmount)}</strong>
@@ -570,30 +556,13 @@ function LotRegisterModal({ stock, currentPrice, brokers, onClose }: {
                   </div>
                 ) : (
                   <div>
-                    <input
-                      type="number"
-                      value={form.totalAmount}
-                      onChange={(e) => setForm((f) => ({ ...f, totalAmount: e.target.value }))}
-                      placeholder={stock.currency === 'USD' ? '매수 금액 (USD)' : '매수 금액 (KRW)'}
-                      style={inputStyle}
-                    />
+                    <input type="number" value={form.totalAmount} onChange={(e) => setForm((f) => ({ ...f, totalAmount: e.target.value }))} placeholder={stock.currency === 'USD' ? '매수 금액 (USD)' : '매수 금액 (KRW)'} style={inputStyle} />
                     {isFinite(derivedQty) && derivedQty > 0 && (
                       <div style={{ fontSize: 11, color: 'var(--fg-muted)', marginTop: 5 }}>
-                        환산 수량 ≈ <strong style={{ color: 'var(--fg-secondary)' }}>
-                          {derivedQty % 1 === 0 ? derivedQty.toLocaleString() : derivedQty.toFixed(6).replace(/\.?0+$/, '')}주
-                        </strong>
+                        환산 수량 ≈ <strong style={{ color: 'var(--fg-secondary)' }}>{derivedQty % 1 === 0 ? derivedQty.toLocaleString() : derivedQty.toFixed(6).replace(/\.?0+$/, '')}주</strong>
                       </div>
                     )}
-                    {form.totalAmount && buyPriceNum <= 0 && (
-                      <div style={{ fontSize: 11, color: 'var(--color-orange-500)', marginTop: 5 }}>
-                        매수가를 먼저 입력하세요.
-                      </div>
-                    )}
-                    {buyPriceNum > 0 && !form.totalAmount && (
-                      <div style={{ fontSize: 11, color: 'var(--fg-muted)', marginTop: 5 }}>
-                        매수 금액을 입력하면 수량이 자동 계산됩니다.
-                      </div>
-                    )}
+                    {form.totalAmount && buyPriceNum <= 0 && <div style={{ fontSize: 11, color: 'var(--color-orange-500)', marginTop: 5 }}>매수가를 먼저 입력하세요.</div>}
                   </div>
                 )}
               </div>
@@ -603,19 +572,10 @@ function LotRegisterModal({ stock, currentPrice, brokers, onClose }: {
               </Field>
               {isUSD && (
                 <Field label="매수 시점 환율 (USD/KRW)">
-                  <input
-                    type="number"
-                    value={exchangeRate}
-                    onChange={(e) => { setExchangeRate(e.target.value); setExchangeRateSource(null); }}
-                    placeholder="예: 1380"
-                    style={inputStyle}
-                  />
+                  <input type="number" value={exchangeRate} onChange={(e) => { setExchangeRate(e.target.value); setExchangeRateSource(null); }} placeholder="예: 1380" style={inputStyle} />
                   {exchangeRateSource && (
                     <div style={{ fontSize: 11, color: 'var(--fg-muted)', marginTop: 5 }}>
-                      {exchangeRateSource === 'db'
-                        ? `📅 ${form.buyDate} 저장된 환율`
-                        : '⚡ 현재 환율 (해당 날짜 데이터 없음)'}
-                      {' · 직접 수정 가능'}
+                      {exchangeRateSource === 'db' ? `📅 ${form.buyDate} 저장된 환율` : '⚡ 현재 환율 (해당 날짜 데이터 없음)'}{' · 직접 수정 가능'}
                     </div>
                   )}
                 </Field>
@@ -625,6 +585,17 @@ function LotRegisterModal({ stock, currentPrice, brokers, onClose }: {
                   {brokers.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
                 </select>
               </Field>
+              <Field label="테마">
+                <select value={form.themeId} onChange={(e) => handleThemeChange(e.target.value)} style={inputStyle}>
+                  <option value="">선택하지 않음</option>
+                  {themes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </select>
+                {themes.length === 0 && (
+                  <div style={{ fontSize: 11, color: 'var(--fg-muted)', marginTop: 5 }}>
+                    테마 관리 메뉴에서 테마를 먼저 등록해 주세요.
+                  </div>
+                )}
+              </Field>
               <Field label="메모">
                 <input value={form.memo} onChange={(e) => setForm((f) => ({ ...f, memo: e.target.value }))} placeholder="선택 사항" style={inputStyle} />
               </Field>
@@ -632,13 +603,53 @@ function LotRegisterModal({ stock, currentPrice, brokers, onClose }: {
 
             <div style={{ display: 'flex', gap: 10, marginTop: 24 }}>
               <button onClick={onClose} style={{ flex: 1, padding: 11, borderRadius: 10, border: '1px solid var(--border-default)', background: 'var(--bg-surface)', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font-sans)', color: 'var(--fg-secondary)' }}>취소</button>
-              <button onClick={handleSubmit} disabled={submitting} style={{ flex: 1, padding: 11, borderRadius: 10, background: 'var(--color-orange-500)', color: 'white', border: 'none', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font-sans)' }}>
+              <button onClick={handleSubmit} disabled={submitting} style={{ flex: 1, padding: 11, borderRadius: 10, background: 'var(--color-orange-500)', color: 'white', border: 'none', fontSize: 14, fontWeight: 600, cursor: submitting ? 'default' : 'pointer', fontFamily: 'var(--font-sans)' }}>
                 {submitting ? '등록 중...' : 'Lot 등록'}
               </button>
             </div>
           </>
         )}
       </div>
+
+      {/* 테마 충돌 경고 다이얼로그 */}
+      {themeConflict && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300, padding: 24 }}>
+          <div style={{ background: 'var(--bg-surface)', borderRadius: 14, padding: 24, width: '100%', maxWidth: 380, boxShadow: 'var(--shadow-xl)' }}>
+            <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>테마 다르게 등록하시겠습니까?</div>
+            <div style={{ fontSize: 13, color: 'var(--fg-secondary)', marginBottom: 14 }}>
+              <strong>{stock.name}</strong>의 기존 Lot이 다른 테마에 등록되어 있습니다:
+            </div>
+            <div style={{ background: 'var(--bg-muted)', borderRadius: 8, padding: '10px 14px', marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {themeConflict.lots.map((l, i) => (
+                <div key={l.id} style={{ fontSize: 12, color: 'var(--fg-primary)' }}>
+                  <span style={{ color: 'var(--fg-muted)' }}>Lot {i + 1} ({l.purchaseDate}): </span>
+                  <strong>{l.themeName}</strong>
+                </div>
+              ))}
+            </div>
+            <div style={{ fontSize: 13, color: 'var(--fg-secondary)', marginBottom: 20 }}>
+              정말 <strong>'{themeConflict.pendingThemeName}'</strong>으로 등록하시겠습니까?
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={() => setThemeConflict(null)}
+                style={{ flex: 1, padding: '10px', borderRadius: 9, border: '1px solid var(--border-default)', background: 'var(--bg-surface)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font-sans)', color: 'var(--fg-secondary)' }}
+              >
+                취소
+              </button>
+              <button
+                onClick={() => {
+                  setForm((f) => ({ ...f, themeId: themeConflict.pendingThemeId }));
+                  setThemeConflict(null);
+                }}
+                style={{ flex: 1, padding: '10px', borderRadius: 9, background: 'var(--color-orange-500)', color: 'white', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font-sans)' }}
+              >
+                확인, 등록
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
